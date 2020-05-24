@@ -3,7 +3,7 @@ from __future__ import print_function
 try:
     from urllib2 import urlopen
 except ImportError:
-    from urllib.reqest import urlopen
+    from urllib.request import urlopen
 import argparse
 
 __authors__ = ["N Miller"]
@@ -12,10 +12,21 @@ __descrption__ = "Lookup USB Product and Vendor details from PID and VID"
 
 # Create dictionary of vendor and product IDs, stored in usbs
 
-def main(vid, pid):
+def main(vid, pid, ids_file=None):
+    if ids_file:
+        usb_file = open(ids_file, encoding='latin1')
+    else:
+        usb_file = get_usb_file()
+    usbs = parse_file(usb_file)
+    results = search_key(usbs, (vid,pid))
+    print("Vendor: {}\nProduct: {}".format(results[0], results[1]))
+
+def get_usb_file():
     url = 'http://www.linux-usb.org/usb.ids'
+    return urlopen(url)
+
+def parse_file(usb_file):
     usbs = {}
-    usb_file = urlopen(url)
     curr_id = ''
     for line in usb_file:
         if isinstance(line, bytes):
@@ -30,18 +41,24 @@ def main(vid, pid):
             elif line.startswith('\t') and line.count('\t') == 1:
                 uid, name = line.strip().split(' ', 1)
                 usbs[curr_id][1][uid] = name.strip()
-    searchkey(vid, pid, usbs)
+    return usbs
 
-def searchkey(vendor_key, product_key, usb_dict):
-    vendor = usb_dict.get(vendor_key, None)
-    if vendor is None:
-        print('Vendor ID Not Found')
-        exit()
-    product = vendor[1].get(product_key, None)
-    if product is None:
-        print("Vendor: {}\nProduct Id not found".format(vendor[0]))
-        exit(0)
-    print("Vendor: {}\nProduct: {}".format(vendor[0], product))
+def get_record(record_line):
+    split = record_line.find(' ')
+    record_id = record_line[:split]
+    record_name = record_line[split + 1:]
+    return record_id, record_name
+
+
+def search_key(usb_dict, ids):
+    vendor_key = ids[0]
+    product_key = ids[1]
+
+    vendor, vendor_data = usb_dict.get(vendor_key, ['unknown', {}])
+    product = 'unknown'
+    if vendor != 'unknown':
+        product = vendor_data.get(product_key, 'unknown')
+    return vendor, product
 
 
 if __name__ == "__main__":
@@ -52,5 +69,6 @@ if __name__ == "__main__":
     )
     parser.add_argument('vid', help="VID Value")
     parser.add_argument('pid', help="PID Value")
+    parser.add_argument('--ids', '-i', help='Local path to the usb.ids file')
     args = parser.parse_args()
-    main(args.vid, args.pid)
+    main(args.vid, args.pid, args.ids)
